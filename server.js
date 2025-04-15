@@ -3,11 +3,14 @@ const http = require('http');
 const { Server } = require('socket.io');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
-const { Pool } = require('pg');
+const { open } = require('sqlite');
+const sqlite3 = require('sqlite3');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const multer = require('multer');
 const morgan = require('morgan');
+const fs = require('fs');
 const winston = require('winston');
 const rateLimit = require('express-rate-limit');
 const twilio = require('twilio');
@@ -18,13 +21,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || '*',
+    origin: process.env.FRONTEND_URL || 'https://app.yourdomain.com',
     methods: ['GET', 'POST'],
   },
 });
 const port = process.env.PORT || 3000;
 
-// Mock SerialPort
+// Mock SerialPort for Cyclic
 const serialPort = {
   write: (data, cb) => {
     console.log(`Mock serial write: ${data}`);
@@ -37,156 +40,49 @@ const serialPort = {
     }
   },
   removeListener: () => {},
+  once: (event, cb) => {
+    if (event === 'data') {
+      setTimeout(() => cb(Buffer.from('OK DEACTIVATE 1\n')), 100);
+    }
+  },
 };
 let buffer = '';
 
-// Logger setup (console only for Railway free tier)
+// Logger setup
 const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
   ),
-  transports: [new winston.transports.Console()],
+  transports: [
+    new winston.transports.File({ filename: '/app/error.log', level: 'error' }),
+    new winston.transports.File({ filename: '/app/combined.log' }),
+    new winston.transports.Console(),
+  ],
 });
 
-// PostgreSQL setup
+// SQLite setup
 async function setupDatabase() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+  const db = await open({
+    filename: '/app/Database.db',
+    driver: sqlite3.Database,
   });
-
-  try {
-    const client = await pool.connect();
-    logger.info('Connected to PostgreSQL database');
-
-    // Initialize tables
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        cpf VARCHAR(255) UNIQUE,
-        name VARCHAR(255),
-        password VARCHAR(255),
-        profile VARCHAR(255),
-        image VARCHAR(255)
-      );
-      CREATE TABLE IF NOT EXISTS users_turismo (
-        id SERIAL PRIMARY KEY,
-        cpf VARCHAR(255) UNIQUE,
-        name VARCHAR(255),
-        matricula VARCHAR(255),
-        enterprise VARCHAR(255),
-        password VARCHAR(255),
-        profile VARCHAR(255),
-        points INTEGER DEFAULT 0,
-        total_time INTEGER DEFAULT 0,
-        last_check_in TIMESTAMP,
-        last_check_out TIMESTAMP
-      );
-      CREATE TABLE IF NOT EXISTS qr_codes (
-        id SERIAL PRIMARY KEY,
-        code VARCHAR(255) UNIQUE,
-        expiration_time TIMESTAMP,
-        used BOOLEAN DEFAULT FALSE,
-        enterprise_name VARCHAR(255),
-        conductor_name VARCHAR(255),
-        plate VARCHAR(255)
-      );
-      CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255),
-        cost FLOAT,
-        image VARCHAR(255),
-        quantity INTEGER
-      );
-      CREATE TABLE IF NOT EXISTS worked_hours (
-        id SERIAL PRIMARY KEY,
-        employer_name VARCHAR(255),
-        date VARCHAR(255),
-        value FLOAT,
-        manager VARCHAR(255),
-        motive TEXT
-      );
-      CREATE TABLE IF NOT EXISTS worked_hours_posto (
-        id SERIAL PRIMARY KEY,
-        employer_name VARCHAR(255),
-        date VARCHAR(255),
-        value FLOAT,
-        manager VARCHAR(255),
-        motive TEXT
-      );
-      CREATE TABLE IF NOT EXISTS files (
-        id SERIAL PRIMARY KEY,
-        cpf VARCHAR(255),
-        file_name VARCHAR(255),
-        hashed_file_name VARCHAR(255)
-      );
-      CREATE TABLE IF NOT EXISTS tasks (
-        id SERIAL PRIMARY KEY,
-        date VARCHAR(255),
-        sector VARCHAR(255),
-        observation TEXT,
-        situation VARCHAR(255),
-        name VARCHAR(255),
-        answer TEXT,
-        attachments TEXT
-      );
-      CREATE TABLE IF NOT EXISTS rescued_products (
-        id SERIAL PRIMARY KEY,
-        cpf VARCHAR(255),
-        product_id INTEGER,
-        points INTEGER,
-        rescue_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    logger.info('Database tables initialized');
-    client.release();
-    return pool;
-  } catch (err) {
-    logger.error('Failed to initialize PostgreSQL database', { error: err.message });
-    throw err;
-  }
+  logger.info('Connected to SQLite database on Cyclic');
+  return db;
 }
 const dbPromise = setupDatabase();
 
-// Session store (memory for free tier)
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
-    resave: false,
-    saveUninitialized: true,
-    cookie: { secure: true, maxAge: 24 * 60 * 60 * 1000 },
-  })
-);
+// Active check-ins
+async function getActiveCheckIns() {
+  const db = await dbPromise;
+  return await db.all(`SELECT cpf, name, last_check_in FROM users_turismo WHERE last_check_out IS NULL`);
+}
 
-// Mock Multer (no persistent storage)
-const upload = {
-  single: () => (req, res, next) => {
-    logger.warn('File upload disabled in free tier');
-    next();
-  },
-  array: () => (req, res, next) => {
-    logger.warn('File uploads disabled in free tier');
-    next();
-  },
-};
-
-// Twilio setup
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-const FIXED_RECIPIENT_PHONE = process.env.WHATSAPP_RECIPIENT_NUMBER;
-
-// Middleware
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
-app.use(bodyParser.json());
-app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
-
-// Rate limiter
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { success: false, message: 'Too many login attempts, try again in 15 minutes' },
-});
+async function broadcastActiveCheckIns() {
+  const activeCheckIns = await getActiveCheckIns();
+  io.emit('activeCheckInsUpdate', activeCheckIns);
+}
 
 // Shower states
 let showerStates = Array(10).fill(false);
@@ -210,6 +106,38 @@ setInterval(() => {
   }
 }, 1000);
 
+// Multer setup
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, '/app/files'),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+});
+const upload = multer({ storage });
+
+// Rate limiter
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Too many login attempts, try again in 15 minutes' },
+});
+
+// Twilio setup
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const FIXED_RECIPIENT_PHONE = process.env.WHATSAPP_RECIPIENT_NUMBER;
+
+// Middleware
+app.use(cors({ origin: process.env.FRONTEND_URL || 'https://app.yourdomain.com' }));
+app.use('/uploads', express.static('/app/files'));
+app.use(bodyParser.json());
+app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: true, maxAge: 24 * 60 * 60 * 1000 },
+  })
+);
+
 // Authentication middleware
 function isAuthenticated(req, res, next) {
   logger.debug('isAuthenticated:', { loggedIn: req.session.loggedIn, user: req.session.user });
@@ -218,9 +146,49 @@ function isAuthenticated(req, res, next) {
     return res.redirect('/index');
   }
   const profileAccess = {
-    Master: ['relatorios', 'home', 'usuarios', 'holerites', 'password', 'chamados', 'checkOut', 'banho', 'products', 'user_profile', 'posto', 'restaurante', 'chuveiros-manual'],
-    Administrador: ['relatorios', 'home', 'usuarios', 'holerites', 'password', 'chamados', 'checkOut', 'banho', 'products', 'user_profile', 'posto', 'restaurante', 'chuveiros-manual'],
-    Encarregado: ['relatorios', 'home', 'holerites', 'password', 'chamados', 'checkOut', 'banho', 'user_profile', 'posto', 'restaurante', 'chuveiros-manual'],
+    Master: [
+      'relatorios',
+      'home',
+      'usuarios',
+      'holerites',
+      'password',
+      'chamados',
+      'checkOut',
+      'banho',
+      'products',
+      'user_profile',
+      'posto',
+      'restaurante',
+      'chuveiros-manual',
+    ],
+    Administrador: [
+      'relatorios',
+      'home',
+      'usuarios',
+      'holerites',
+      'password',
+      'chamados',
+      'checkOut',
+      'banho',
+      'products',
+      'user_profile',
+      'posto',
+      'restaurante',
+      'chuveiros-manual',
+    ],
+    Encarregado: [
+      'relatorios',
+      'home',
+      'holerites',
+      'password',
+      'chamados',
+      'checkOut',
+      'banho',
+      'user_profile',
+      'posto',
+      'restaurante',
+      'chuveiros-manual',
+    ],
     RH: ['home', 'usuarios', 'holerites', 'password', 'chamados', 'user_profile'],
     manutencao: ['home', 'holerites', 'password', 'chamados', 'user_profile'],
     'T.I.': ['home', 'holerites', 'password', 'chamados', 'user_profile'],
@@ -260,9 +228,12 @@ app.get('/chamados', isAuthenticated, (req, res) => res.sendFile(path.join(__dir
 app.get('/checkOut', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'checkOut.html')));
 app.get('/banho', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'banho.html')));
 app.get('/products', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'products.html')));
-app.get('/chuveiros-manual', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'control-shower.html')));
+app.get('/chuveiros-manual', isAuthenticated, (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'control-shower.html'))
+);
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/files', express.static(path.join(__dirname, 'files')));
 
 // Socket.IO
 io.on('connection', (socket) => {
@@ -277,15 +248,8 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('new_message', data.message);
   });
   socket.on('requestInitialData', async () => {
-    try {
-      const pool = await dbPromise;
-      const { rows } = await pool.query(
-        'SELECT cpf, name, last_check_in FROM users_turismo WHERE last_check_out IS NULL'
-      );
-      socket.emit('activeCheckInsUpdate', rows);
-    } catch (err) {
-      logger.error('Error fetching active check-ins for Socket.IO', { error: err.message });
-    }
+    const activeCheckIns = await getActiveCheckIns();
+    socket.emit('activeCheckInsUpdate', activeCheckIns);
   });
 });
 
@@ -304,19 +268,18 @@ app.post('/validate-qr', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(
-      `SELECT id, used FROM qr_codes WHERE code = $1 AND expiration_time > CURRENT_TIMESTAMP`,
-      [qrCode]
-    );
-    const row = rows[0];
+    const db = await dbPromise;
+    const row = await db.get(`SELECT id, used FROM qr_codes WHERE code = ? AND expiration_time > ?`, [
+      qrCode,
+      new Date().toISOString(),
+    ]);
     if (!row) {
       return res.status(404).json({ success: false, message: 'QR code inválido ou expirado.' });
     }
     if (row.used) {
       return res.status(400).json({ success: false, message: 'QR code já foi usado.' });
     }
-    await pool.query(`UPDATE qr_codes SET used = TRUE WHERE id = $1`, [row.id]);
+    await db.run(`UPDATE qr_codes SET used = 1 WHERE id = ?`, [row.id]);
     res.status(200).json({ success: true, message: 'QR code validado com sucesso.' });
   } catch (error) {
     logger.error('Error validating QR code', { qrCode, error: error.message });
@@ -481,9 +444,8 @@ app.post('/login', loginLimiter, async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query('SELECT * FROM users WHERE cpf = $1', [cpf]);
-    const row = rows[0];
+    const db = await dbPromise;
+    const row = await db.get(`SELECT * FROM users WHERE cpf = ?`, [cpf]);
     if (!row) {
       logger.warn('Login failed: Invalid CPF', { cpf, ip: req.ip });
       return res.status(401).json({ success: false, message: 'Invalid CPF or password' });
@@ -525,9 +487,9 @@ app.post('/submit-form', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    await pool.query(
-      `INSERT INTO worked_hours (employer_name, date, value, manager, motive) VALUES ($1, $2, $3, $4, $5)`,
+    const db = await dbPromise;
+    await db.run(
+      `INSERT INTO worked_hours (employer_name, date, value, manager, motive) VALUES (?, ?, ?, ?, ?)`,
       [name, date, value, manager, motive]
     );
     logger.info('Data inserted into worked_hours', { name, date, manager });
@@ -548,9 +510,9 @@ app.post('/submit-form-posto', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    await pool.query(
-      `INSERT INTO worked_hours_posto (employer_name, date, value, manager, motive) VALUES ($1, $2, $3, $4, $5)`,
+    const db = await dbPromise;
+    await db.run(
+      `INSERT INTO worked_hours_posto (employer_name, date, value, manager, motive) VALUES (?, ?, ?, ?, ?)`,
       [name, date, value, manager, motive]
     );
     logger.info('Data inserted into worked_hours_posto', { name, date, manager });
@@ -586,13 +548,13 @@ app.get('/get-worked-hours', async (req, res) => {
   const params = [];
 
   if (startDate && endDate) {
-    query += ` WHERE date BETWEEN $1 AND $2 ORDER BY date`;
+    query += ` WHERE date BETWEEN ? AND ? ORDER BY date`;
     params.push(startDate, endDate);
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(query, params);
+    const db = await dbPromise;
+    const rows = await db.all(query, params);
     res.status(200).json(rows);
   } catch (error) {
     logger.error('Error fetching worked hours', { error: error.message });
@@ -606,13 +568,13 @@ app.get('/get-worked-hours-posto', async (req, res) => {
   const params = [];
 
   if (startDate && endDate) {
-    query += ` WHERE date BETWEEN $1 AND $2 ORDER BY date`;
+    query += ` WHERE date BETWEEN ? AND ? ORDER BY date`;
     params.push(startDate, endDate);
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(query, params);
+    const db = await dbPromise;
+    const rows = await db.all(query, params);
     res.status(200).json(rows);
   } catch (error) {
     logger.error('Error fetching worked hours posto', { error: error.message });
@@ -635,11 +597,13 @@ app.post('/create-user', async (req, res) => {
 
   try {
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-    const pool = await dbPromise;
-    await pool.query(
-      `INSERT INTO users (name, cpf, password, profile) VALUES ($1, $2, $3, $4)`,
-      [name, cpf, hashedPassword, profile]
-    );
+    const db = await dbPromise;
+    await db.run(`INSERT INTO users (name, cpf, password, profile) VALUES (?, ?, ?, ?)`, [
+      name,
+      cpf,
+      hashedPassword,
+      profile,
+    ]);
     logger.info('User created', { cpf });
     res.status(200).json({ success: true, message: 'User created successfully' });
   } catch (error) {
@@ -648,9 +612,29 @@ app.post('/create-user', async (req, res) => {
   }
 });
 
-app.post('/upload-profile', (req, res) => {
-  logger.warn('Profile upload disabled in free tier', { ip: req.ip });
-  res.status(400).json({ error: 'File uploads disabled in free tier' });
+app.post('/upload-profile', upload.single('image'), async (req, res) => {
+  if (!req.session.loggedIn) {
+    logger.warn('Unauthorized profile upload attempt', { ip: req.ip });
+    return res.status(403).json({ error: 'Access Denied' });
+  }
+  if (!req.file) {
+    logger.warn('No image uploaded', { ip: req.ip });
+    return res.status(400).json({ error: 'No image file uploaded' });
+  }
+
+  const imagePath = `/uploads/${req.file.filename}`;
+  const userCPF = req.session.user.cpf;
+
+  try {
+    const db = await dbPromise;
+    await db.run('UPDATE users SET image = ? WHERE cpf = ?', [imagePath, userCPF]);
+    req.session.user.image = imagePath;
+    logger.info('Profile image updated', { cpf: userCPF });
+    res.json({ message: 'Profile image updated successfully', image: imagePath });
+  } catch (error) {
+    logger.error('Error uploading profile image', { cpf: userCPF, error: error.message });
+    res.status(500).json({ error: 'Failed to update profile image' });
+  }
 });
 
 app.post('/change-password', async (req, res) => {
@@ -662,8 +646,8 @@ app.post('/change-password', async (req, res) => {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const pool = await dbPromise;
-    await pool.query('UPDATE users SET password = $1 WHERE cpf = $2', [hashedPassword, cpf]);
+    const db = await dbPromise;
+    await db.run('UPDATE users SET password = ? WHERE cpf = ?', [hashedPassword, cpf]);
     logger.info('Password changed', { cpf });
     res.json({ success: true, message: 'Senha alterada com sucesso' });
   } catch (error) {
@@ -674,8 +658,8 @@ app.post('/change-password', async (req, res) => {
 
 app.get('/get-users', async (req, res) => {
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query('SELECT id, cpf, name, profile FROM users');
+    const db = await dbPromise;
+    const rows = await db.all('SELECT id, cpf, name, profile FROM users');
     res.json(rows);
   } catch (error) {
     logger.error('Error fetching users', { error: error.message });
@@ -686,8 +670,8 @@ app.get('/get-users', async (req, res) => {
 app.delete('/delete-user/:cpf', async (req, res) => {
   const { cpf } = req.params;
   try {
-    const pool = await dbPromise;
-    await pool.query('DELETE FROM users WHERE cpf = $1', [cpf]);
+    const db = await dbPromise;
+    await db.run('DELETE FROM users WHERE cpf = ?', [cpf]);
     logger.info('User deleted', { cpf });
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
@@ -696,16 +680,31 @@ app.delete('/delete-user/:cpf', async (req, res) => {
   }
 });
 
-app.post('/upload-file', (req, res) => {
-  logger.warn('File upload disabled in free tier', { ip: req.ip });
-  res.status(400).json({ error: 'File uploads disabled in free tier' });
+app.post('/upload-file', upload.single('file'), async (req, res) => {
+  const { cpf } = req.body;
+  const originalFileName = req.file.originalname;
+  const hashedFileName = req.file.filename;
+
+  try {
+    const db = await dbPromise;
+    await db.run(`INSERT INTO files (cpf, file_name, hashed_file_name) VALUES (?, ?, ?)`, [
+      cpf,
+      originalFileName,
+      hashedFileName,
+    ]);
+    logger.info('File uploaded', { cpf, file: hashedFileName });
+    res.status(200).json({ message: 'File uploaded successfully' });
+  } catch (error) {
+    logger.error('Error uploading file', { cpf, error: error.message });
+    res.status(500).json({ message: 'Error uploading file' });
+  }
 });
 
 app.get('/files/:cpf', async (req, res) => {
   const cpf = req.params.cpf;
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query('SELECT * FROM files WHERE cpf = $1', [cpf]);
+    const db = await dbPromise;
+    const rows = await db.all('SELECT * FROM files WHERE cpf = ?', [cpf]);
     res.json({ files: rows });
   } catch (error) {
     logger.error('Error fetching files', { cpf, error: error.message });
@@ -714,11 +713,18 @@ app.get('/files/:cpf', async (req, res) => {
 });
 
 app.get('/files/download/:fileName', (req, res) => {
-  logger.warn('File download disabled in free tier', { ip: req.ip });
-  res.status(400).json({ error: 'File downloads disabled in free tier' });
+  const fileName = req.params.fileName;
+  const filePath = path.join(__dirname, 'files', fileName);
+  logger.debug(`Attempting to download file: ${filePath}`);
+  res.download(filePath, (err) => {
+    if (err) {
+      logger.error('Error sending file', { fileName, error: err.message });
+      res.status(500).send('Error downloading file');
+    }
+  });
 });
 
-app.post('/create-task', async (req, res) => {
+app.post('/create-task', upload.array('attachments'), async (req, res) => {
   const { date, setor, obs, name } = req.body;
   if (!date || !setor || !obs || !name) {
     logger.warn('Invalid task creation request', { ip: req.ip });
@@ -726,13 +732,16 @@ app.post('/create-task', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    await pool.query(
+    const db = await dbPromise;
+    const attachments = req.files ? req.files.map((file) => file.path) : [];
+    const result = await db.run(
       `INSERT INTO tasks (date, sector, observation, situation, name, attachments) 
-       VALUES ($1, $2, $3, 'aberto', $4, '{}')`,
-      [date, setor, obs, name]
+       VALUES (?, ?, ?, 'aberto', ?, ?)`,
+      [date, setor, obs, name, JSON.stringify(attachments)]
     );
-    logger.info('Task created', { name, date });
+    const taskId = result.lastID;
+
+    logger.info('Task created', { name, date, taskId });
 
     try {
       const messageBody = `Novo chamado criado: "${obs}" para o setor "${setor}" em ${date}.`;
@@ -741,7 +750,7 @@ app.post('/create-task', async (req, res) => {
         to: `whatsapp:${FIXED_RECIPIENT_PHONE}`,
         body: messageBody,
       });
-      logger.info('WhatsApp message sent', { recipientPhone: FIXED_RECIPIENT_PHONE });
+      logger.info('WhatsApp message sent', { recipientPhone: FIXED_RECIPIENT_PHONE, taskId });
     } catch (whatsappError) {
       logger.error('Failed to send WhatsApp message', { error: whatsappError.message });
     }
@@ -760,7 +769,7 @@ app.get('/tasks', async (req, res) => {
   const params = [];
 
   if (situation) {
-    query += ` WHERE situation = $1`;
+    query += ` WHERE situation = ?`;
     params.push(situation);
   }
 
@@ -778,8 +787,8 @@ app.get('/tasks', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(query, params);
+    const db = await dbPromise;
+    const rows = await db.all(query, params);
     res.status(200).json({ success: true, data: rows });
   } catch (error) {
     logger.error('Error fetching tasks', { error: error.message });
@@ -790,13 +799,12 @@ app.get('/tasks', async (req, res) => {
 app.get('/task/:id', async (req, res) => {
   const taskId = req.params.id;
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(
+    const db = await dbPromise;
+    const row = await db.get(
       `SELECT id, date, sector, observation, situation, answer, attachments 
-       FROM tasks WHERE id = $1`,
+       FROM tasks WHERE id = ?`,
       [taskId]
     );
-    const row = rows[0];
     if (!row) {
       logger.warn('Task not found', { taskId });
       return res.status(404).json({ success: false, message: 'Tarefa não encontrada' });
@@ -828,12 +836,11 @@ app.put('/update-task/:id', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(
-      `SELECT situation, answer, attachments FROM tasks WHERE id = $1`,
+    const db = await dbPromise;
+    const row = await db.get(
+      `SELECT situation, answer, attachments FROM tasks WHERE id = ?`,
       [taskId]
     );
-    const row = rows[0];
     if (!row) {
       logger.warn('Task not found for update', { taskId });
       return res.status(404).json({ success: false, message: 'Tarefa não encontrada' });
@@ -841,8 +848,8 @@ app.put('/update-task/:id', async (req, res) => {
 
     const newSituation = situation || row.situation;
     const newAnswer = answer !== undefined ? answer : row.answer;
-    await pool.query(
-      `UPDATE tasks SET situation = $1, answer = $2 WHERE id = $3`,
+    await db.run(
+      `UPDATE tasks SET situation = ?, answer = ? WHERE id = ?`,
       [newSituation, newAnswer, taskId]
     );
     logger.info('Task updated', { taskId });
@@ -861,17 +868,17 @@ app.post('/create-user-turismo', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(`SELECT * FROM users_turismo WHERE cpf = $1`, [cpf]);
-    if (rows[0]) {
+    const db = await dbPromise;
+    const existingUser = await db.get(`SELECT * FROM users_turismo WHERE cpf = ?`, [cpf]);
+    if (existingUser) {
       logger.warn('CPF already registered', { cpf, ip: req.ip });
       return res.status(400).json({ success: false, message: 'CPF já cadastrado' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await pool.query(
+    await db.run(
       `INSERT INTO users_turismo (name, cpf, matricula, enterprise, password, profile, points, total_time) 
-       VALUES ($1, $2, $3, $4, $5, $6, 0, 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, 0, 0)`,
       [name, cpf, matricula, empresa, hashedPassword, profile]
     );
     logger.info('Turismo user created', { cpf });
@@ -884,10 +891,10 @@ app.post('/create-user-turismo', async (req, res) => {
 
 app.get('/get-users-turismo', async (req, res) => {
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query('SELECT cpf, name, enterprise, profile FROM users_turismo');
-    logger.debug('Fetched turismo users', { count: rows.length });
-    res.json(rows);
+    const db = await dbPromise;
+    const users = await db.all('SELECT cpf, name, enterprise, profile FROM users_turismo');
+    logger.debug('Fetched turismo users', { count: users.length });
+    res.json(users);
   } catch (error) {
     logger.error('Error fetching turismo users', { error: error.message });
     res.status(500).json({ message: 'Erro ao buscar usuários' });
@@ -902,16 +909,15 @@ app.post('/check-in-turismo', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(`SELECT * FROM users_turismo WHERE cpf = $1`, [cpf]);
-    const row = rows[0];
+    const db = await dbPromise;
+    const row = await db.get(`SELECT * FROM users_turismo WHERE cpf = ?`, [cpf]);
     if (!row) {
       logger.warn('CPF not found for check-in', { cpf, ip: req.ip });
       return res.status(400).json({ success: false, message: 'CPF não encontrado' });
     }
 
-    await pool.query(
-      `UPDATE users_turismo SET last_check_in = CURRENT_TIMESTAMP - INTERVAL '3 hours', total_time = total_time + 0, last_check_out = NULL WHERE cpf = $1`,
+    await db.run(
+      `UPDATE users_turismo SET last_check_in = datetime(CURRENT_TIMESTAMP, '-3 hours'), total_time = total_time + 0, last_check_out = NULL WHERE cpf = ?`,
       [cpf]
     );
     logger.info('Check-in successful', { cpf });
@@ -930,12 +936,10 @@ app.post('/check-out-turismo', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(
-      'SELECT profile, last_check_in FROM users_turismo WHERE cpf = $1 AND last_check_out IS NULL',
-      [cpf]
-    );
-    const user = rows[0];
+    const db = await dbPromise;
+    const user = await db.get('SELECT profile, last_check_in FROM users_turismo WHERE cpf = ? AND last_check_out IS NULL', [
+      cpf,
+    ]);
     if (!user) {
       logger.warn('User not found or already checked out', { cpf, ip: req.ip });
       return res.status(400).json({ success: false, message: 'Usuário não encontrado ou já fez check-out' });
@@ -948,25 +952,26 @@ app.post('/check-out-turismo', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Perfil inválido para cálculo de pontos' });
     }
 
-    const { rows: timeRows } = await pool.query(
-      `SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - INTERVAL '3 hours' - last_check_in)) AS time_diff
-       FROM users_turismo WHERE cpf = $1`,
-      [cpf]
-    );
-    const timeDiff = parseInt(timeRows[0].time_diff);
+    const nowMinus3 = await db.get("SELECT STRFTIME('%s', DATETIME('now', '-3 hours')) as now_ts");
+    const lastCheckInTs = await db.get("SELECT STRFTIME('%s', last_check_in) as checkin_ts FROM users_turismo WHERE cpf = ?", [
+      cpf,
+    ]);
+    const timeDiff = parseInt(nowMinus3.now_ts) - parseInt(lastCheckInTs.checkin_ts);
     const pointsToAdd = Math.floor(timeDiff / 1800) * pointsMultiplier;
 
-    const result = await pool.query(
-      `UPDATE users_turismo 
-       SET last_check_out = CURRENT_TIMESTAMP - INTERVAL '3 hours', 
-           total_time = total_time + $1, 
-           points = COALESCE(points, 0) + $2
-       WHERE cpf = $3 AND last_check_out IS NULL
-       RETURNING *`,
-      [timeDiff, pointsToAdd, cpf]
-    );
+    const query = `
+      UPDATE users_turismo 
+      SET 
+        last_check_out = DATETIME('now', '-3 hours'), 
+        total_time = total_time + (STRFTIME('%s', DATETIME('now', '-3 hours')) - STRFTIME('%s', last_check_in)), 
+        points = COALESCE(points, 0) + (FLOOR((STRFTIME('%s', DATETIME('now', '-3 hours')) - STRFTIME('%s', last_check_in)) / 1800) * ?)
+      WHERE 
+        cpf = ? 
+        AND last_check_out IS NULL
+    `;
 
-    if (result.rowCount === 0) {
+    const result = await db.run(query, [pointsMultiplier, cpf]);
+    if (result.changes === 0) {
       logger.warn('No check-out performed, possibly already checked out', { cpf });
       return res.status(400).json({ success: false, message: 'Check-out já realizado ou usuário não encontrado' });
     }
@@ -977,6 +982,7 @@ app.post('/check-out-turismo', async (req, res) => {
       pointsAdded: pointsToAdd,
       timeDiff,
       lastCheckIn: user.last_check_in,
+      checkOutTime: nowMinus3.now_ts,
     });
     res.json({ success: true, message: 'Check-out realizado com sucesso' });
   } catch (error) {
@@ -993,9 +999,8 @@ app.get('/user-data-turismo', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(`SELECT * FROM users_turismo WHERE cpf = $1`, [cpf]);
-    const row = rows[0];
+    const db = await dbPromise;
+    const row = await db.get(`SELECT * FROM users_turismo WHERE cpf = ?`, [cpf]);
     res.status(200).json({ success: true, data: row });
   } catch (error) {
     logger.error('Error fetching user data turismo', { cpf, error: error.message });
@@ -1005,11 +1010,8 @@ app.get('/user-data-turismo', async (req, res) => {
 
 app.get('/get-active-check-ins', async (req, res) => {
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(
-      'SELECT cpf, name, last_check_in FROM users_turismo WHERE last_check_out IS NULL'
-    );
-    res.json(rows);
+    const activeCheckIns = await getActiveCheckIns();
+    res.json(activeCheckIns);
   } catch (error) {
     logger.error('Error fetching active check-ins', { error: error.message });
     res.status(500).json({ error: 'Error fetching active check-ins' });
@@ -1024,11 +1026,10 @@ app.post('/insert-qr-code', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    await pool.query(
-      `INSERT INTO qr_codes (code, expiration_time, used, enterprise_name, conductor_name, plate) 
-       VALUES ($1, $2, FALSE, $3, $4, $5)`,
-      [code, expiration, enterprise_name || null, conductor_name || null, plate || null]
+    const db = await dbPromise;
+    await db.run(
+      `INSERT INTO qr_codes (code, expiration_time, used, enterprise_name, conductor_name, plate) VALUES (?, ?, ?, ?, ?, ?)`,
+      [code, expiration, 0, enterprise_name || null, conductor_name || null, plate || null]
     );
     logger.info('QR code inserted', { code });
     res.status(200).json({ success: true, message: 'QR code data inserted successfully' });
@@ -1040,18 +1041,23 @@ app.post('/insert-qr-code', async (req, res) => {
 
 app.get('/used-qr-codes', async (req, res) => {
   const { startDate, endDate } = req.query;
-  let query = `SELECT code, expiration_time, enterprise_name, conductor_name, plate 
-               FROM qr_codes WHERE used = TRUE`;
+  let query = `
+    SELECT code, expiration_time, enterprise_name, conductor_name, plate 
+    FROM qr_codes 
+    WHERE used = 1`;
   const params = [];
 
   if (startDate && endDate) {
-    query += ` AND expiration_time::date BETWEEN $1 AND $2 ORDER BY expiration_time`;
+    query += `
+      AND DATE(DATETIME(expiration_time, '-3 hours')) 
+      BETWEEN DATE(?) AND DATE(?) 
+      ORDER BY expiration_time`;
     params.push(startDate, endDate);
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(query, params);
+    const db = await dbPromise;
+    const rows = await db.all(query, params);
     res.status(200).json(rows);
   } catch (error) {
     logger.error('Error fetching used QR codes', { error: error.message });
@@ -1059,15 +1065,38 @@ app.get('/used-qr-codes', async (req, res) => {
   }
 });
 
-app.post('/register-product', async (req, res) => {
-  logger.warn('Product registration disabled in free tier', { ip: req.ip });
-  res.status(400).json({ error: 'File uploads disabled in free tier' });
+app.post('/register-product', upload.single('image'), async (req, res) => {
+  const { name, cost, quantity } = req.body;
+  if (!name || !cost || !quantity || !req.file) {
+    logger.warn('Invalid product registration request', { ip: req.ip });
+    return res.status(400).json({ error: 'All fields (name, cost, quantity, image) are required' });
+  }
+
+  const parsedQuantity = parseInt(quantity);
+  if (isNaN(parsedQuantity) || parsedQuantity < 0) {
+    logger.warn('Invalid quantity', { ip: req.ip, quantity });
+    return res.status(400).json({ error: 'Quantity must be a non-negative number' });
+  }
+
+  const imagePath = `/uploads/${req.file.filename}`;
+  try {
+    const db = await dbPromise;
+    await db.run(
+      `INSERT INTO products (name, cost, image, quantity) VALUES (?, ?, ?, ?)`,
+      [name, cost, imagePath, parsedQuantity]
+    );
+    logger.info('Product registered', { name });
+    res.json({ message: 'Product registered successfully', id: db.lastID });
+  } catch (error) {
+    logger.error('Error registering product', { name, error: error.message });
+    res.status(500).json({ error: 'Failed to register product' });
+  }
 });
 
 app.get('/api/products', async (req, res) => {
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query('SELECT id, name, cost AS points, image, quantity FROM products');
+    const db = await dbPromise;
+    const rows = await db.all('SELECT id, name, cost AS points, image, quantity FROM products');
     res.json(rows);
   } catch (error) {
     logger.error('Error fetching products', { error: error.message });
@@ -1089,9 +1118,9 @@ app.put('/api/products/:id', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    await pool.query(
-      'UPDATE products SET name = $1, cost = $2, quantity = $3 WHERE id = $4',
+    const db = await dbPromise;
+    await db.run(
+      'UPDATE products SET name = ?, cost = ?, quantity = ? WHERE id = ?',
       [name, cost, parsedQuantity, id]
     );
     logger.info('Product updated', { id });
@@ -1105,8 +1134,8 @@ app.put('/api/products/:id', async (req, res) => {
 app.delete('/api/products/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const pool = await dbPromise;
-    await pool.query('DELETE FROM products WHERE id = $1', [id]);
+    const db = await dbPromise;
+    await db.run('DELETE FROM products WHERE id = ?', [id]);
     logger.info('Product deleted', { id });
     res.send('Product deleted successfully');
   } catch (error) {
@@ -1123,9 +1152,8 @@ app.post('/login-turismo', loginLimiter, async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(`SELECT * FROM users_turismo WHERE cpf = $1`, [cpf]);
-    const row = rows[0];
+    const db = await dbPromise;
+    const row = await db.get(`SELECT * FROM users_turismo WHERE cpf = ?`, [cpf]);
     if (!row) {
       logger.warn('Login failed: Invalid CPF', { cpf, ip: req.ip });
       return res.status(401).json({ success: false, message: 'Invalid CPF or password' });
@@ -1149,7 +1177,7 @@ app.post('/login-turismo', loginLimiter, async (req, res) => {
       res.status(200).json({ success: true, message: 'Login successful', redirect: '/checkOut' });
     } else {
       logger.warn('Login failed: Incorrect password', { cpf, ip: req.ip });
-      res.status(401).json({ success: false, message: 'Invalid CPF or password' });
+      return res.status(401).json({ success: false, message: 'Invalid CPF or password' });
     }
   } catch (error) {
     logger.error('Error in login-turismo', { cpf, error: error.message });
@@ -1189,9 +1217,8 @@ app.get('/api/user-turismo-points', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query('SELECT points FROM users_turismo WHERE cpf = $1', [cpf]);
-    const row = rows[0];
+    const db = await dbPromise;
+    const row = await db.get('SELECT points FROM users_turismo WHERE cpf = ?', [cpf]);
     if (!row) {
       logger.warn('User not found for points', { cpf, ip: req.ip });
       return res.status(404).send('User not found');
@@ -1211,68 +1238,58 @@ app.post('/api/rescue', async (req, res) => {
   }
 
   try {
-    const pool = await dbPromise;
-    const client = await pool.connect();
+    const db = await dbPromise;
+    await db.run('BEGIN TRANSACTION');
 
-    try {
-      await client.query('BEGIN');
+    const placeholders = products.map(() => '?').join(', ');
+    const productQuery = `SELECT id, cost AS points, quantity FROM products WHERE id IN (${placeholders})`;
+    const selectedProducts = await db.all(productQuery, products);
 
-      const placeholders = products.map((_, i) => `$${i + 1}`).join(', ');
-      const productQuery = `SELECT id, cost AS points, quantity FROM products WHERE id IN (${placeholders})`;
-      const { rows: selectedProducts } = await client.query(productQuery, products);
-
-      if (selectedProducts.length !== products.length) {
-        await client.query('ROLLBACK');
-        logger.warn('Some products not found', { cpf, products });
-        return res.status(400).json({ error: 'One or more products not found' });
-      }
-
-      const insufficientStock = selectedProducts.some((product) => product.quantity < 1);
-      if (insufficientStock) {
-        await client.query('ROLLBACK');
-        logger.warn('Insufficient stock for rescue', { cpf, products });
-        return res.status(400).json({ error: 'One or more products are out of stock' });
-      }
-
-      const totalCost = selectedProducts.reduce((sum, product) => sum + product.points, 0);
-
-      const { rows: userRows } = await client.query('SELECT points FROM users_turismo WHERE cpf = $1', [cpf]);
-      const userRow = userRows[0];
-      if (!userRow) {
-        await client.query('ROLLBACK');
-        logger.warn('User not found for rescue', { cpf, ip: req.ip });
-        return res.status(404).json({ error: 'User not found' });
-      }
-      if (userRow.points < totalCost) {
-        await client.query('ROLLBACK');
-        logger.warn('Not enough points for rescue', { cpf, totalCost, userPoints: userRow.points });
-        return res.status(400).json({ error: 'Not enough points for this rescue' });
-      }
-
-      await client.query('UPDATE users_turismo SET points = points - $1 WHERE cpf = $2', [totalCost, cpf]);
-
-      const rescueInsertQuery = `INSERT INTO rescued_products (cpf, product_id, points) VALUES ($1, $2, $3)`;
-      const updateQuantityQuery = `UPDATE products SET quantity = quantity - 1 WHERE id = $1`;
-      const operations = selectedProducts.map((product) =>
-        Promise.all([
-          client.query(rescueInsertQuery, [cpf, product.id, product.points]),
-          client.query(updateQuantityQuery, [product.id]),
-        ])
-      );
-      await Promise.all(operations);
-
-      await client.query('COMMIT');
-      logger.info('Rescue successful', { cpf, totalCost });
-      res.status(200).json({ message: 'Rescue successful', totalCost });
-    } catch (error) {
-      await client.query('ROLLBACK');
-      logger.error('Error processing rescue', { cpf, error: error.message });
-      res.status(500).json({ error: 'An error occurred while processing the rescue' });
-    } finally {
-      client.release();
+    if (selectedProducts.length !== products.length) {
+      await db.run('ROLLBACK');
+      logger.warn('Some products not found', { cpf, products });
+      return res.status(400).json({ error: 'One or more products not found' });
     }
+
+    const insufficientStock = selectedProducts.some((product) => product.quantity < 1);
+    if (insufficientStock) {
+      await db.run('ROLLBACK');
+      logger.warn('Insufficient stock for rescue', { cpf, products });
+      return res.status(400).json({ error: 'One or more products are out of stock' });
+    }
+
+    const totalCost = selectedProducts.reduce((sum, product) => sum + product.points, 0);
+
+    const userRow = await db.get('SELECT points FROM users_turismo WHERE cpf = ?', [cpf]);
+    if (!userRow) {
+      await db.run('ROLLBACK');
+      logger.warn('User not found for rescue', { cpf, ip: req.ip });
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (userRow.points < totalCost) {
+      await db.run('ROLLBACK');
+      logger.warn('Not enough points for rescue', { cpf, totalCost, userPoints: userRow.points });
+      return res.status(400).json({ error: 'Not enough points for this rescue' });
+    }
+
+    await db.run('UPDATE users_turismo SET points = points - ? WHERE cpf = ?', [totalCost, cpf]);
+
+    const rescueInsertQuery = `INSERT INTO rescued_products (cpf, product_id, points) VALUES (?, ?, ?)`;
+    const updateQuantityQuery = `UPDATE products SET quantity = quantity - 1 WHERE id = ?`;
+    const operations = selectedProducts.map((product) =>
+      Promise.all([
+        db.run(rescueInsertQuery, [cpf, product.id, product.points]),
+        db.run(updateQuantityQuery, [product.id]),
+      ])
+    );
+    await Promise.all(operations);
+
+    await db.run('COMMIT');
+    logger.info('Rescue successful', { cpf, totalCost });
+    res.status(200).json({ message: 'Rescue successful', totalCost });
   } catch (error) {
-    logger.error('Error initiating rescue transaction', { cpf, error: error.message });
+    logger.error('Error processing rescue', { cpf, error: error.message });
+    await db.run('ROLLBACK');
     res.status(500).json({ error: 'An error occurred while processing the rescue' });
   }
 });
@@ -1286,14 +1303,14 @@ app.get('/api/rescue-report', async (req, res) => {
     FROM rescued_products r
     JOIN products p ON r.product_id = p.id
     JOIN users_turismo u ON r.cpf = u.cpf
-    WHERE r.rescue_date >= $1 AND r.rescue_date <= $2
+    WHERE r.rescue_date >= ? AND r.rescue_date <= ?
     ORDER BY r.rescue_date DESC
   `;
 
   try {
-    const pool = await dbPromise;
-    const { rows } = await pool.query(reportQuery, [startDate, adjustedEndDate]);
-    res.status(200).json(rows);
+    const db = await dbPromise;
+    const report = await db.all(reportQuery, [startDate, adjustedEndDate]);
+    res.status(200).json(report);
   } catch (error) {
     logger.error('Error fetching rescue report', { error: error.message });
     res.status(500).json({ error: 'An error occurred while generating the report' });
