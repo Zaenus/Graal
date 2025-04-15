@@ -1,7 +1,8 @@
 const express = require('express');
-const https = require('https');
+const http = require('http'); // Changed from https
 const { Server } = require('socket.io');
 const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session); // Add session store
 const bcrypt = require('bcrypt');
 const { open } = require('sqlite');
 const sqlite3 = require('sqlite3');
@@ -10,7 +11,6 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const morgan = require('morgan');
-const { SerialPort } = require('serialport');
 const fs = require('fs');
 const winston = require('winston');
 const rateLimit = require('express-rate-limit');
@@ -20,28 +20,32 @@ require('dotenv').config();
 
 const app = express();
 
-// Load SSL certificate and key
-const privateKey = fs.readFileSync('localhost-key.pem', 'utf8');
-const certificate = fs.readFileSync('localhost.pem', 'utf8');
-const credentials = { key: privateKey, cert: certificate };
-
-// Create HTTPS server
-const server = https.createServer(credentials, app);
+// Create HTTP server (Render handles SSL)
+const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: 'https://localhost:3000', // Adjust to your frontend URL
+    origin: process.env.FRONTEND_URL || '*', // Use Render URL or wildcard
     methods: ['GET', 'POST'],
   },
 });
-const port = 3000;
+const port = process.env.PORT || 3000; // Dynamic port for Render
 
-// Serial port setup
-const serialPort = new SerialPort({ path: 'COM3', baudRate: 9600 }, (err) => {
-  if (err) logger.error('Serial port error:', { message: err.message });
-  else logger.info('Serial port opened');
-});
-
-let buffer = ''; // Buffer to accumulate Serial data
+// Mock SerialPort for Render (no hardware)
+const serialPort = {
+  write: (data, cb) => {
+    console.log(`Mock serial write: ${data}`);
+    cb(null); // Simulate success
+  },
+  on: (event, cb) => {
+    console.log(`Mock serial event: ${event}`);
+    // Simulate Arduino response for deactivate
+    if (event === 'data') {
+      setTimeout(() => cb(Buffer.from('OK DEACTIVATE 1\n')), 100);
+    }
+  },
+  removeListener: () => {},
+};
+let buffer = '';
 
 // Winston logger setup
 const logger = winston.createLogger({
@@ -51,86 +55,59 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   transports: [
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' }),
+    new winston.transports.File({ filename: '/opt/render/project/src/error.log', level: 'error' }), // Persistent disk
+    new winston.transports.File({ filename: '/opt/render/project/src/combined.log' }),
     new winston.transports.Console()
-  ]
+  ],
 });
 
 // Async SQLite database setup
 async function setupDatabase() {
   const db = await open({
-    filename: './Database.db',
-    driver: sqlite3.Database
+    filename: '/opt/render/project/src/Database.db', // Persistent disk
+    driver: sqlite3.Database,
   });
   logger.info('Connected to SQLite database with async driver');
   return db;
 }
 const dbPromise = setupDatabase();
 
-// Function to fetch active check-ins
-async function getActiveCheckIns() {
-  const db = await dbPromise;
-  return await db.all(`SELECT cpf, name, last_check_in FROM users_turismo WHERE last_check_out IS NULL`);
-}
-
-// Broadcast active check-ins to all clients
-async function broadcastActiveCheckIns() {
-  const activeCheckIns = await getActiveCheckIns();
-  io.emit('activeCheckInsUpdate', activeCheckIns);
-}
-
-// Initialize shower states and timers
-let showerStates = Array(10).fill(false);
-let showerTimers = Array(10).fill(0);
-
-// Update timers every second
-setInterval(() => {
-  for (let i = 0; i < 10; i++) {
-    if (showerStates[i] && showerTimers[i] > 0) {
-      showerTimers[i] -= 1000; // Decrease by 1 second (1000 ms)
-      if (showerTimers[i] <= 0) {
-        showerStates[i] = false;
-        showerTimers[i] = 0;
-        const command = `DEACTIVATE ${i + 1}\n`;
-        serialPort.write(command, (err) => {
-          if (err) {
-            logger.error('Serial write error in timer loop', { command, error: err.message });
-          }
-        });
-      }
-    }
-  }
-}, 1000);
+// Session store with SQLite
+app.use(
+  session({
+    store: new SQLiteStore({
+      db: '/opt/render/project/src/sessions.db', // Persistent disk
+      dir: '/opt/render/project/src',
+    }),
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: true, maxAge: 24 * 60 * 60 * 1000 }, // Secure for HTTPS
+  })
+);
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, './files'),
+  destination: (req, file, cb) => cb(null, '/opt/render/project/src/files'), // Persistent disk
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({ storage });
-
-// Rate limiter for login endpoints
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per IP
-  message: { success: false, message: 'Too many login attempts, try again in 15 minutes' }
-});
 
 // Twilio setup
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 const FIXED_RECIPIENT_PHONE = process.env.WHATSAPP_RECIPIENT_NUMBER;
 
 // Middleware
-app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'files')));
+app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+app.use('/uploads', express.static('/opt/render/project/src/files')); // Persistent disk
 app.use(bodyParser.json());
-app.use(session({
-  secret: 'your-secret-key',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: true, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
-}));
+
+// Rate limiter for login endpoints
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Too many login attempts, try again in 15 minutes' },
+});
 
 // Authentication middleware
 function isAuthenticated(req, res, next) {
@@ -1288,9 +1265,5 @@ app.get('/api/rescue-report', async (req, res) => {
 
 // Start server
 server.listen(port, () => {
-  logger.info(`HTTPS Server running on https://localhost:${port}`);
+  logger.info(`Server running on port ${port}`);
 });
-
-serialPort.on('data', (data) => {
-    console.log('Arduino response:', data.toString().trim());
-})
