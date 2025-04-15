@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<!-- Coding by CodingLab | www.codinglabweb.com  -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="/favicon.jpg">
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="https://unicons.iconscout.com/release/v4.0.0/css/line.css">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.3.0/css/all.min.css">
+    <title>Graal Website Login</title>
+</head>
+
+<body>
+    <form id="login-form">
+    <div class="container">
+        <div class="login-left">
+            <div class="login-header">
+                <h1>Bem Vindo ao WebApp da Graal</h1>
+                <p>Faça login para usar a plataforma</p>
+            </div>
+            <div class="login-form-content">
+                <div class="form-item">
+                    <label for="cpf">Entre com seu CPF</label>
+                    <input type="text" id="cpf" maxlength="14">
+                </div>
+                <div class="form-item">
+                    <label for="password">Entre com sua senha</label>
+                    <input type="password" id="password" class="password">
+                    <i class="fa-solid fa-eye"></i>
+                </div>
+                <div class="form-item">
+                    <div class="checkbox">
+                        <input type="checkbox" id="rememberMeCheckbox" checked>
+                        <label for="rememberMeCheckbox" class="checkboxLabel">Lembrar</label>
+                    </div>
+                </div>
+                <button type="submit">Entrar</button>
+            </div>
+        </div>
+    </div>
+    </form>
+    <script src="../js/login.js"></script>
+</body>
+</html>

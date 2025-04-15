@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check-In</title>
+    <link rel="stylesheet" href="./css/checkIn.css">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+</head>
+<body>
+    <div class="container">
+        <h1>Sistema de Pontos</h1>
+        <div class="options">
+            <div id="check-in-btn" class="option-icon">
+                <i class='bx bx-check-circle'></i>
+                <span>Check-In</span>
+            </div>
+            <div id="login-redirect" class="option-icon">
+                <i class='bx bx-log-in'></i>
+                <span>Login</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Check-In Popup -->
+    <div id="check-in-popup" class="popup" style="display: none;">
+        <div class="popup-content">
+            <h2>Check-In</h2>
+            <form id="check-in-form">
+                <div class="form-group">
+                    <label for="cpf">Digite seu CPF:</label>
+                    <input type="text" id="cpf" name="cpf" placeholder="Entre com seu CPF" required>
+                </div>
+                <div class="popup-buttons">
+                    <button type="submit" id="submit-check-in">Confirmar</button>
+                    <button type="button" id="close-check-in">Cancelar</button>
+                </div>
+            </form>
+            <div id="check-in-message" class="message"></div>
+        </div>
+    </div>
+
+    <script src="../js/mobile-turismo.js"></script>
+</body>
+</html>

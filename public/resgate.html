@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tela de Resgate de Produtos</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.jpg">
+    <link rel="stylesheet" href="./css/resgate.css">
+</head>
+<body>
+    <div class="header">
+        <img src="./images/logo.png" alt="logo" class="logo">
+        <h1 class="title">Resgate de Pontos</h1>
+    </div>
+
+    <div class="user-info">
+        <div class="user-badge">
+            <span class="badge-star">★</span>
+            <span class="badge-text">Pontos</span>
+        </div>
+        <div class="user-details">
+            <span id="display-user-points"></span>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>Itens disponíveis</h1>
+        <ul class="product-list" id="product-list">
+            <!-- Itens serão adicionados dinamicamente aqui -->
+        </ul>
+
+        <!-- Exibe a soma dos pontos selecionados -->
+        <div class="total-points">
+            <span>Total de Pontos: </span><span id="total-points">0</span> pontos
+        </div>
+
+        <button class="btn-rescue">Confirmar Resgate</button>
+    </div>
+
+    <div class="log-out" id="log-out">Logout</div>
+
+    <!-- Área de impressão para produtos resgatados -->
+    <div id="print-area" class="modal">
+        <div class="modal-content">
+            <div class="print-header">
+                <img src="./images/logo.png" alt="logo" class="print-logo">
+                <h2>Resumo do Resgate</h2>
+            </div>
+            <ul id="rescued-products">
+                <!-- Rescued products will be dynamically added here -->
+            </ul>
+            <div class="modal-buttons">
+                <button id="closeBtn">Fechar</button>
+                <button id="printBtn">Imprimir</button>
+            </div>
+        </div>
+    </div> 
+    
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Confirmar Resgate</h2>
+            <p>Tem certeza que deseja resgatar os itens selecionados?</p>
+            <ul id="confirmation-products">
+                <!-- Selected products will be dynamically added here -->
+            </ul>
+            <p>Total de Pontos: <span id="confirmation-total-points">0</span></p>
+            <div class="modal-buttons">
+                <button id="cancel-rescue-btn">Cancelar</button>
+                <button id="confirm-rescue-btn">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Popup -->
+    <div id="notification-popup" class="notification" style="display: none;">
+        <div class="notification-content">
+            <span id="notification-message"></span>
+            <button id="close-notification" class="close-notification">×</button>
+        </div>
+    </div>
+
+    <script src="../js/resgate.js"></script>
+</body>
+</html>

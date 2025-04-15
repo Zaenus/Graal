@@ -1,0 +1,227 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+/* Global styles */
+body {
+  font-family: 'Roboto', Arial, sans-serif;
+  background: linear-gradient(135deg, #e0f7fa, #b2ebf2); /* Soft gradient background */
+  text-align: center;
+  margin: 0;
+  padding: 40px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.content-left-back{
+  position: relative;
+  right: 40%;
+}
+.content-left-back .icon{
+  font-size: 40px;
+  border: none;
+  border-radius: 100px;
+  color: #320d87;
+}   
+.content-left-back .icon:hover{
+  color: #b621f3;
+}
+
+/* Heading */
+h1 {
+  font-size: 2.5rem;
+  color: #0277bd; /* Deep blue */
+  margin-bottom: 30px;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Buttons container */
+#buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 20px;
+  max-width: 1200px;
+  width: 100%;
+  padding: 0 20px;
+}
+
+/* Remove this block since we won't use disabled state */
+/* .shower-button:disabled {
+  background: linear-gradient(45deg, #b0bec5, #cfd8dc);
+  color: #78909c;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+} */
+
+/* Add new inactive state styling */
+.shower-button.inactive {
+  background: linear-gradient(45deg, #d32f2f, #f44336); /* Red gradient */
+  color: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.shower-button.inactive:hover {
+  background: linear-gradient(45deg, #c62828, #e53935); /* Darker red on hover */
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Ensure active (normal) state remains as before */
+.shower-button {
+  padding: 15px;
+  font-size: 1.8rem;
+  background: linear-gradient(45deg, #0288d1, #4fc3f7); /* Gradient blue */
+  color: white;
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.3s;
+}
+
+.shower-button:hover:not(.inactive) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(45deg, #0277bd, #29b6f6);
+}
+
+/* Modal overlay */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6); /* Darker overlay */
+  z-index: 1000;
+  backdrop-filter: blur(2px); /* Subtle blur effect */
+}
+
+/* Modal content */
+.modal-content {
+  background: #fff;
+  margin: 10% auto;
+  padding: 30px;
+  width: 80%;
+  max-width: 450px;
+  min-height: 400px;
+  max-height: 80vh;
+  font-size: 1.5rem;
+  border-radius: 15px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  position: relative;
+  overflow-y: auto; /* Scroll if content overflows */
+  animation: slideIn 0.3s ease-out;
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Slide-in animation for modal */
+@keyframes slideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Control button */
+.control-button {
+  padding: 12px 20px;
+  width: 140px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  left: 15%;
+  transform: translateX(-50%);
+}
+
+.control-button.off {
+  background: linear-gradient(45deg, #4CAF50, #81c784); /* Green gradient */
+  color: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.control-button.off:hover {
+  background: linear-gradient(45deg, #43a047, #76b852);
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+
+.control-button.on {
+  background: linear-gradient(45deg, #d32f2f, #f44336); /* Red gradient */
+  color: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.control-button.on:hover {
+  background: linear-gradient(45deg, #c62828, #e53935);
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Close button */
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  font-size: 40px;
+  font-weight: bold;
+  color: #333;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+.close-button:hover {
+  color: #ff0000; /* Red on hover for feedback */
+}
+
+/* Timer display */
+p[id^="timer-"] {
+  font-size: 1.8rem;
+  color: #0277bd;
+  margin: 20px 0;
+  font-weight: bold;
+}
+
+/* Circular progress bar styles */
+.circular-progress {
+  position: relative;
+  height: 150px; /* Smaller size to fit modal */
+  width: 150px;
+  border-radius: 50%;
+  background: conic-gradient(#7d2ae8 0deg, #ededed 0deg); /* Start at 0% */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 10px auto; /* Center in modal */
+}
+
+.circular-progress::before {
+  content: "";
+  position: absolute;
+  height: 130px; /* Adjusted for smaller size */
+  width: 130px;
+  border-radius: 50%;
+  background-color: #fff;
+}
+
+.progress-value {
+  position: relative;
+  font-size: 30px; /* Slightly smaller for modal */
+  font-weight: 600;
+  color: #7d2ae8;
+}
+@media (max-width: 1024px) {
+  .control-button {
+    left: 20%;
+  }
+}

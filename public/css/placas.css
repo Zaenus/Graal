@@ -1,0 +1,128 @@
+/* Base styles */
+:root {
+    /* ===== Colors ===== */
+    --body-color: #E4E9F7;
+    --sidebar-color: #FFF;
+    --primary-color: #695CFE;
+    --secondary-color: #b621f3;
+    --primary-color-light: #F6F5FF;
+    --toggle-color: #DDDD;
+    --text-color: #707070;
+  
+    /* ===== Transition =====*/
+    --tran-02: all 0.2s ease;
+    --tran-03: all 0.3s ease;
+    --tran-04: all 0.4s ease;
+    --tran-05: all 0.5s ease;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    margin: 20px;
+}
+
+.title{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-content: center; 
+    font-size: 40px;
+}
+
+.searchBtn{
+    height: 33px;
+    width: 100px;
+    border-radius: 4px;
+    font-size: 20px;
+    font-weight: 500;
+    background-color: var(--sidebar-color);
+    cursor: pointer;
+}
+.searchBtn:hover{
+    background-color: var(--primary-color);
+}
+
+.placaForm{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+    gap: 15px; /* Adds space between each label/input pair */
+    margin-top: 5%;
+}
+.placaForm label {
+    font-size: 18px;
+    margin-bottom: 5px; /* Adds space below each label */
+    font-weight: bold; /* Makes the labels bold */
+}
+
+.placaForm input {
+    font-size: 18px;
+    margin-bottom: 5px;
+}
+
+.results{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+}
+
+table {
+    width: 80%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+th {
+    background-color: #007bff;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+/* Responsive design */
+@media screen and (max-width: 768px) {
+    .placaForm{
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+    table, thead, tbody, th, td, tr {
+        display: block;
+        width: 90%;
+    }
+
+    th {
+        display: none; /* Hide table headers on small screens */
+    }
+
+    tbody tr {
+        margin-bottom: 10px;
+        padding: 10px;
+        width: 80%;
+    }
+
+    tbody td {
+        text-align: left;
+        padding-left: 40%;
+        position: relative;
+    }
+
+    tbody td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        width: 5%;
+        padding-left: 5px;
+        font-weight: bold;
+        text-align: left;
+    }
+}

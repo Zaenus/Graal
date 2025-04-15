@@ -1,0 +1,14 @@
+{
+  "name": "Graal Web App",
+  "short_name": "Graal",
+  "icons": [
+    {
+      "src": "/favicon.jpg",
+      "type": "image/jpg"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0000FF",
+  "theme_color": "#0000FF"
+}

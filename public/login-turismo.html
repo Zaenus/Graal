@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tela de Login</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.jpg">
+    <link rel="stylesheet" href="./css/login-turismo.css">
+    <link rel="stylesheet" href="https://unicons.iconscout.com/release/v4.0.0/css/line.css">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+</head>
+<body>
+    <div class="header">
+        <div id="back-to-checkin" class="back-arrow">
+            <i class='bx bx-arrow-back'></i>
+        </div>
+        <img src="./images/logo.png" alt="logo" class="logo">
+        <h1 class="title">Resgate de Pontos</h1>
+    </div>
+    <div class="container">
+        <h1>Login</h1>
+        <div id="error-message"></div>
+        <div class="input-group">
+            <label for="username">CPF</label>
+            <input type="text" id="username" placeholder="Digite seu CPF" maxlength="14">
+        </div>
+        <div class="input-group">
+            <label for="password">Senha</label>
+            <input type="password" id="password" placeholder="Digite sua senha">
+        </div>
+        <button id="btn-login" class="btn-login">Entrar</button>
+    </div>
+
+    <script src="../js/login-turismo.js"></script>
+</body>
+</html>

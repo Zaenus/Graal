@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extras Web Graal</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.jpg">
+    <link rel="stylesheet" href="css/posto.css">
+    <link rel="stylesheet" href="https://unicons.iconscout.com/release/v4.0.0/css/line.css">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+</head>
+<body>
+    <form id="insert-form">
+        <div class="container">
+            <div class="content-right">
+                <div class="content-left-back">
+                    <a href="/home"><i class='bx bx-arrow-back icon'></i></a>
+                </div>
+                <div class="content-right-header">
+                    <h1 class="content-right-header-h1">Detalhamento de Extras</h1>
+                </div>
+                <div class="input-field">
+                    <input type="date" id="dateTimeInput" name="dateTimeInput" required>
+                </div>
+                <div class="input-field">
+                    <input type="text" id="name" placeholder="Nome Completo do Colaborador" required>
+                    <i class="uil uil-user icon"></i>
+                </div>
+                <div class="input-field">
+                    <input type="text" id="value" placeholder="Valor" required>
+                    <i class="uil uil-dollar-alt icon"></i>
+                </div>
+                <div class="input-field">
+                    <input type="text" id="motive" class="password" placeholder="Motivo" required>
+                    <i class="uil uil-comment-lines icon"></i>
+                </div>
+                <button type="submit"><i class="uil uil-file-check"></i> Enviar</button>
+            </div>
+        </div>     
+    </form>
+
+    <!-- Popup HTML -->
+    <div id="popup" class="popup">
+        <div class="popup-content">
+            <span id="close-popup" class="close">&times;</span>
+            <p>Enviado com Sucesso!</p>
+        </div>
+    </div>
+
+    <!-- Printable Area -->
+    <div id="printable-area" style="display: none;">
+        <h2>Recebimento Freelancer</h2>
+        <p id="print-name"></p>
+        <p id="print-date"></p>
+        <p id="print-value"></p>
+        <p id="print-motive"></p>
+        <p id="print-manager"></p>
+    </div>
+
+    <script src="../js/operacional.js"></script>
+</body>
+</html>

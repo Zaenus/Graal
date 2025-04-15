@@ -1,0 +1,197 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;600&display=swap');
+
+:root{
+    --primary-color: #131086;
+    --secondary-color: #b621f3;
+    --primary-color-light: #F6F5FF;
+    --toggle-color: #DDDD;
+    --text-color: #707070;
+  
+    /* ===== Transition =====*/
+    --tran-02: all 0.2s ease;
+    --tran-03: all 0.3s ease;
+    --tran-04: all 0.4s ease;
+    --tran-05: all 0.5s ease;
+}
+
+*{
+    box-sizing: border-box;
+}
+body{
+    padding: 0;
+    margin: 0;
+    font-family: "Inter", sans-serif;
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    padding: 20px; /* Reduced padding for smaller screens */
+    min-height: 100vh;
+}
+
+.container{
+    min-height: calc(100vh - 40px * 2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.content-left-back .icon{
+    font-size: 40px;
+    border: none;
+    border-radius: 100px;
+    color: #ddd;
+}   
+.content-left-back .icon:hover{
+    color: #b621f3;
+}
+.content-right{
+    background-color: white; /* Changed for better contrast on mobile */
+    width: 100%;
+    max-width: 500px; /* Ensures it fits on wider screens but scales down on mobile */
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.content-right-header h1{
+    text-align: center;
+    font-size: 24px; /* Reduced for mobile readability */
+    margin-bottom: 15px;
+}
+
+.input-field{
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.input-field input{
+    width: 100%;
+    padding: 10px 35px 10px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    transition: var(--tran-03);
+}
+
+.input-field input:focus, .input-field input:valid{
+    border-color: var(--secondary-color);
+}
+
+.input-field i{
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    color: #999;
+    font-size: 20px;
+    transition: var(--tran-03);
+}
+
+.input-field input:focus ~ i, .input-field input:valid ~ i{
+    color: var(--secondary-color);
+}
+
+button{
+    width: 100%;
+    border: none;
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 10px;
+    border-radius: 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: var(--tran-02);
+}
+
+button:hover{
+    opacity: 0.9;
+    transform: translateY(-2px);
+}
+
+/* Popup container - can be anything you want */
+.popup {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+/* Popup content */
+.popup-content {
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    border-radius: 10px;
+    width: 80%; /* Could be more or less, depending on screen size */
+    max-width: 300px;
+    text-align: center;
+}
+
+/* The Close Button */
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Styles for the printable area */
+#printable-area {
+    font-family: 'Courier New', Courier, monospace; /* Use a monospaced font for a receipt-like look */
+    width: 100%; /* Set a fixed width like a receipt */
+    height: 600px;
+    margin: 0 auto; /* Center the content */
+    padding: 10px; /* Add some padding */
+    border: 1px solid #000; /* A thin border for the receipt */
+    border-radius: 5px; /* Slightly rounded corners */
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3); /* Add a subtle shadow */
+    background-color: #fff; /* White background */
+}
+
+#printable-area h2 {
+    text-align: center; /* Center the header */
+    font-size: 22px; /* Slightly larger font for the title */
+    margin-bottom: 10px; /* Space below the title */
+}
+
+#printable-area p {
+    margin: 5px 0; /* Space above and below each paragraph */
+    font-size: 16px; /* Set a standard font size for the content */
+    font-weight: 800;
+    line-height: 1.5; /* Line spacing for readability */
+}
+
+/* Rest of the CSS remains the same for popup and print styles */
+
+@media screen and (max-width: 500px){
+    body{
+        padding: 10px;
+    }
+    .content-right{
+        padding: 10px;
+    }
+}
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #printable-area, #printable-area * {
+        visibility: visible;
+    }
+    #printable-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+    }
+}

@@ -1,0 +1,241 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;600&display=swap');
+
+:root{
+    --primary-color: #131086;
+    --secondary-color: #b621f3;
+
+    --primary-color-light: #F6F5FF;
+    --toggle-color: #DDDD;
+    --text-color: #707070;
+}
+
+*{
+    box-sizing: border-box;
+}
+body{
+    padding: 0;
+    margin: 0;
+    font-family: "Inter", sans-serif;
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    padding: 40px;
+    }
+
+.container{
+    min-height: calc( 100vh - 40px * 2);
+    display: grid;
+    grid-template-columns: 50% 50%;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.content-left{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background-color: white;
+}
+.content-right{
+    background-color: #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+    padding: 5%;
+}
+.content-left-header h1{
+    font-size: 40px;
+    margin-bottom: 10px;
+}
+.content-left-header p{
+    opacity: .7;
+}
+.content-left-main{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+    padding: 5%;
+}
+.box-left, .box-right{
+    display: flex;
+    height: 250px;
+    width: 400px;
+    background: var(--secondary-color);
+    margin: 20px 20px 40px;
+    border-radius: 10px;
+    padding: 1%;
+    position: relative;
+}
+.box-left p{
+    position: absolute;
+    font-size: 35px;
+    font-weight: 600;
+    margin-left: 60px;
+    color: #19446e;
+}
+.box-right p{
+    position: absolute;
+    font-size: 35px;
+    font-weight: 800;
+    margin-left: 110px;
+    color: #19446e;
+}
+.box{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+    margin-top: 10px;
+}
+.icon{
+    font-size: 100px;
+}
+.box-left .icon{
+    margin-top: 20px;
+    margin-left: 150px;
+}
+.box-left .icon:hover{
+    color: #eee;
+    cursor: pointer;
+}
+.box-right .icon{
+    margin-top: 20px;
+    margin-left: 150px;
+}
+.box-right .icon:hover{ 
+    color: #eee;
+    cursor: pointer;
+}
+
+/* Popup container - can be anything you want */
+.popup {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+/* Popup content */
+.popup-content {
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    border-radius: 10px;
+    width: 90%; /* Could be more or less, depending on screen size */
+    height: 300px;
+    max-width: 300px;
+    text-align: center;
+}
+
+/* The Close Button */
+.close {
+    margin-top: -10px;
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+.popup-content h2{
+    font-size: 30px;
+    margin-left: 10px;
+}
+.input-field input{
+    background: #eee;
+    padding: 5px 35px;
+    height: 40px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    border-bottom: 2px solid #ccc;
+    border-top: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+.input-field input:is(:focus, :valid){
+    border-bottom-color: #4070f4;
+}
+.addBtn{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 60%;
+    height: 40px;
+    margin-top: 40px;
+    margin-left: 50px;
+    font-size: 20px;
+    font-weight: 700;
+    border: var(--secondary-color), solid, 2px;
+    border-radius: 8px;
+}
+.addBtn:hover{
+    background-color: var(--secondary-color);
+    color: var(--primary-color-light);
+    cursor: pointer;
+}
+/* Popup container - can be anything you want */
+.popupAdd {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+/* Popup content */
+.popup-content-add {
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    border-radius: 10px;
+    width: 80%; /* Could be more or less, depending on screen size */
+    max-width: 300px;
+    text-align: center;
+}
+/* The Close Button */
+.closeAdd {
+    margin-top: -10px;
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.closeAdd:hover,
+.closeAdd:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Responsive layout */
+@media (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr;
+    }
+    .content-left, .content-right {
+        padding: 20px;
+    }
+    .box-left, .box-right{
+        width: 300px;
+    }
+}
